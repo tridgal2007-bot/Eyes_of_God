@@ -1,0 +1,31 @@
+COMO ADICIONAR SUAS FOTOS E VÍDEOS
+====================================
+
+1) Coloque seus arquivos (fotos e vídeos) dentro desta pasta "media".
+   Formatos aceitos: .jpg, .jpeg, .png, .webp, .gif (fotos) e .mp4, .webm, .mov (vídeos).
+
+2) Abra o arquivo "index.html" em um editor de texto (Bloco de Notas, VS Code, etc).
+
+3) Procure por este trecho, perto do topo do <script>:
+
+   const ARQUIVOS = [
+     // { arquivo: "media/sua-foto.jpg", legenda: "Uma legenda opcional" },
+   ];
+
+4) Para cada arquivo que você colocou na pasta "media", adicione uma linha assim
+   (respeitando as vírgulas):
+
+   const ARQUIVOS = [
+     { arquivo: "media/praia.jpg", legenda: "Verão de 2024" },
+     { arquivo: "media/video1.mp4", legenda: "" },
+     { arquivo: "media/perfil.png", legenda: "" },
+   ];
+
+   - "arquivo" deve ser exatamente "media/" + o nome do arquivo (com a extensão).
+   - "legenda" é opcional, pode deixar como "" (vazio) se não quiser texto.
+
+5) Salve o index.html e abra ele no navegador. Clique na pasta desbloqueada
+   ("ARQUIVO PESSOAL") para ver a galeria.
+
+Dica: mantenha a pasta "media" sempre ao lado do arquivo "index.html" —
+      se você mover um dos dois separadamente, as imagens somem.
