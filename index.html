@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OLHO DE DEUS — Sistema de Arquivos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080706;
+    --paper: #1a1610;
+    --paper-light: #252018;
+    --line: #3a332655;
+    --red: #8c1f1f;
+    --red-bright: #b32b2b;
+    --brass: #c9a25d;
+    --brass-dim: #8a7040;
+    --ink: #e7e0cf;
+    --ink-dim: #8a8272;
+    --green: #4f6b3e;
+    --gold: #d4af37;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 500;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.015) 0px,
+      rgba(255,255,255,0.015) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+    mix-blend-mode: overlay;
+  }
+
+  .display { font-family: 'Special Elite', 'IBM Plex Mono', monospace; }
+  a { color: inherit; text-decoration: none; }
+
+  /* ---------- TELA DE AUTH (3 TOQUES) ---------- */
+  #fakeAuthScreen {
+    position: fixed; inset: 0;
+    background: #050403;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    transition: opacity 0.8s ease, transform 0.8s ease;
+    cursor: pointer;
+  }
+  #fakeAuthScreen.unlocked {
+    opacity: 0;
+    transform: scale(1.05);
+    pointer-events: none;
+  }
+
+  .auth-title {
+    font-family: 'Special Elite', monospace;
+    font-size: 1.2rem;
+    color: var(--brass);
+    letter-spacing: 0.15em;
+    margin-bottom: 0.5rem;
+    text-align: center;
+  }
+  
+  .auth-subtitle {
+    font-size: 0.75rem;
+    color: var(--ink-dim);
+    text-align: center;
+    margin-bottom: 2.5rem;
+    max-width: 320px;
+    line-height: 1.5;
+  }
+
+  .pin-display {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .pin-dot {
+    width: 14px; height: 14px;
+    border: 1px solid var(--brass-dim);
+    border-radius: 50%;
+    transition: all 0.3s ease;
+  }
+  .pin-dot.filled {
+    background: var(--brass);
+    box-shadow: 0 0 10px var(--brass);
+    border-color: var(--brass);
+  }
+
+  .cryptic-hint {
+    font-size: 0.65rem;
+    color: var(--ink-dim);
+    text-align: center;
+    letter-spacing: 0.1em;
+    opacity: 0.6;
+    margin-top: 2rem;
+    font-style: italic;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(5px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(3px); }
+  }
+
+  /* ---------- MODAL DE PERGUNTAS ---------- */
+  #welcomeModal {
+    position: fixed; inset: 0;
+    background: rgba(5,4,3,0.97);
+    z-index: 9998;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    backdrop-filter: blur(8px);
+  }
+  #welcomeModal.visible { display: flex; animation: fadeIn 0.8s ease; }
+  
+  .modal-content {
+    max-width: 600px;
+    width: 100%;
+    background: var(--paper);
+    border: 1px solid var(--brass-dim);
+    padding: 2.5rem 2rem;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8), inset 0 0 40px rgba(0,0,0,0.5);
+  }
+  .modal-content::before {
+    content: "FORMALIDADE DO SISTEMA";
+    position: absolute;
+    top: -12px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    border: 1px solid var(--brass);
+    color: var(--brass);
+    font-family: 'Special Elite', monospace;
+    font-size: 0.7rem;
+    padding: 0.2rem 1rem;
+    letter-spacing: 0.15em;
+    white-space: nowrap;
+  }
+  .modal-text {
+    font-family: 'Special Elite', monospace;
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--ink);
+    margin-bottom: 1.5rem;
+    text-align: justify;
+  }
+  
+  .auth-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    padding: 0.8rem;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.3s ease;
+  }
+  .auth-input:focus {
+    border-color: var(--brass);
+    box-shadow: 0 0 8px rgba(201, 162, 93, 0.15);
+  }
+  .auth-input::placeholder {
+    color: var(--ink-dim);
+    opacity: 0.5;
+  }
+
+  .modal-accept-btn {
+    display: block;
+    width: 100%;
+    padding: 1rem;
+    background: transparent;
+    border: 1px solid var(--green);
+    color: #86a674;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    margin-top: 1.5rem;
+  }
+  .modal-accept-btn:hover:not(:disabled) {
+    background: rgba(79, 107, 62, 0.1);
+    border-color: #6f8f5c;
+    box-shadow: 0 0 15px rgba(79, 107, 62, 0.2);
+  }
+  .modal-accept-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+    border-color: var(--brass-dim);
+    color: var(--brass-dim);
+  }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ---------- HERO ---------- */
+  .hero {
+    min-height: 90svh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 8vh 6vw 6vh;
+    position: relative;
+    background: radial-gradient(ellipse 60% 45% at 50% 38%, rgba(140,31,31,0.08), transparent 70%), var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .eye-wrap {
+    width: 110px; height: 110px; margin-bottom: 2rem;
+    filter: drop-shadow(0 0 20px rgba(140,31,31,0.3));
+  }
+  .eye-outline { fill: none; stroke: var(--brass); stroke-width: 2.5; }
+  .eye-iris { fill: #1a1512; stroke: var(--red-bright); stroke-width: 1.5; }
+  .eye-pupil { fill: var(--red-bright); }
+  .eye-shine { fill: rgba(231,224,207,0.7); }
+
+  @keyframes blink {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95% { transform: scaleY(0.05); }
+  }
+  .eye-lids { transform-origin: 55px 55px; animation: blink 7s ease-in-out infinite; }
+
+  .kicker { font-size: 0.7rem; letter-spacing: 0.15em; color: var(--ink-dim); margin: 0 0 0.8rem; }
+  h1.title {
+    font-size: clamp(2.2rem, 7vw, 4.5rem); margin: 0 0 1rem;
+    letter-spacing: 0.04em; color: var(--ink);
+    text-shadow: 0 0 30px rgba(140,31,31,0.2);
+  }
+  .typed-line {
+    font-size: 0.9rem; color: var(--ink-dim); max-width: 46ch;
+    border-right: 2px solid var(--red-bright); white-space: nowrap;
+    overflow: hidden; margin: 0 auto; animation: caret 0.85s steps(1) infinite;
+  }
+  @keyframes caret { 50% { border-color: transparent; } }
+
+  .scroll-cue {
+    margin-top: 3rem; font-size: 0.65rem; letter-spacing: 0.15em;
+    color: var(--ink-dim); opacity: 0.6; animation: bounce 2s infinite;
+  }
+  @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+
+  /* ---------- ARQUIVOS (PASTAS REALISTAS) ---------- */
+  section.archive { padding: 8vh 6vw 12vh; max-width: 1200px; margin: 0 auto; }
+  .archive-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 0.8rem; border-bottom: 1px solid var(--line);
+    padding-bottom: 1rem; margin-bottom: 3rem;
+  }
+  .archive-head h2 { font-family: 'Special Elite', monospace; font-size: 1.4rem; margin: 0; font-weight: normal; }
+  .archive-head .count { font-size: 0.7rem; color: var(--ink-dim); letter-spacing: 0.05em; }
+
+  .folder-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 2rem 1.5rem; perspective: 1000px;
+  }
+
+  .folder {
+    position: relative;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 4px 12px 8px 8px;
+    padding: 2rem 1.2rem 1.2rem;
+    cursor: pointer; text-align: left; color: inherit;
+    font-family: inherit; transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  
+  .folder::before {
+    content: ""; position: absolute; top: -9px; left: 0;
+    width: 45%; height: 10px;
+    background: var(--paper);
+    border: 1px solid var(--line); border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    z-index: -1;
+  }
+  .folder::after {
+    content: ""; position: absolute; inset: 0;
+    border-radius: 4px 12px 8px 8px;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+
+  .folder .id { font-size: 0.65rem; color: var(--ink-dim); letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+  .folder .name { font-family: 'Special Elite', monospace; font-size: 1rem; margin: 0 0 0.4rem; line-height: 1.3; }
+  .folder .desc { font-size: 0.72rem; color: var(--ink-dim); margin: 0; line-height: 1.4; }
+
+  .folder .stamp {
+    position: absolute; right: 0.8rem; bottom: 0.8rem;
+    font-family: 'Special Elite', monospace; font-size: 0.65rem;
+    letter-spacing: 0.08em; padding: 0.2rem 0.5rem;
+    border: 1.5px solid var(--red); color: var(--red-bright);
+    transform: rotate(-8deg); opacity: 0.8; pointer-events: none;
+  }
+
+  .folder.locked:hover { transform: translateY(-4px); border-color: #554834; }
+  .folder.locked.shake { animation: shake 0.4s ease; }
+
+  .folder.vitoria-special {
+    background: linear-gradient(135deg, #1f1b14 0%, #2a241b 100%);
+    border: 1px solid var(--brass-dim);
+    box-shadow: 0 0 15px rgba(201, 162, 93, 0.1), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .folder.vitoria-special .name { color: var(--brass); }
+  .folder.vitoria-special .stamp {
+    border-color: var(--gold); color: var(--gold);
+    transform: rotate(-5deg); font-weight: bold;
+  }
+  .folder.vitoria-special:hover {
+    transform: translateY(-6px) scale(1.02);
+    border-color: var(--brass);
+    box-shadow: 0 10px 25px rgba(201, 162, 93, 0.15);
+  }
+
+  /* ---------- BANNERS FLUTUANTES ---------- */
+  .floating-banner {
+    position: fixed; left: 50%; bottom: 2rem; transform: translate(-50%, 150%);
+    background: var(--paper-light); border: 1px solid var(--red);
+    color: var(--red-bright); font-family: 'Special Elite', monospace;
+    padding: 0.8rem 1.5rem; font-size: 0.8rem; letter-spacing: 0.05em;
+    z-index: 600; transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6); text-align: center; max-width: 90vw;
+  }
+  .floating-banner.show { transform: translate(-50%, 0); }
+  
+  .floating-banner.silver {
+    background: rgba(201, 162, 93, 0.15);
+    border: 1px solid var(--brass);
+    color: var(--brass);
+  }
+
+  .text-file-area { margin-bottom: 2rem; }
+  .text-file {
+    width: 100%; display: flex; align-items: center; gap: 1rem;
+    padding: 1rem 1.2rem; background: var(--paper); border: 1px solid var(--line);
+    color: var(--ink); font-family: inherit; text-align: left; cursor: pointer;
+    border-radius: 4px 8px 6px 6px; transition: all 0.25s ease;
+  }
+  .text-file:hover { transform: translateY(-2px); border-color: var(--brass); }
+  .text-file-icon {
+    width: 42px; height: 48px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--brass-dim); color: var(--brass); font-size: 0.65rem;
+    font-family: 'Special Elite', monospace; letter-spacing: 0.04em; flex-shrink: 0;
+  }
+  .text-file-name { font-family: 'Special Elite', monospace; font-size: 0.95rem; color: var(--brass); }
+  .text-file-editor { display: none; margin-top: 0.8rem; background: var(--paper); border: 1px solid var(--brass-dim); }
+  .text-file-editor.visible { display: block; animation: fadeIn 0.35s ease; }
+  .text-file-editor-head { display: flex; justify-content: space-between; gap: 1rem; padding: 0.8rem 1rem; border-bottom: 1px solid var(--line); font-size: 0.65rem; color: var(--ink-dim); letter-spacing: 0.04em; }
+  .text-file-editor-head span:first-child { color: var(--brass); font-family: 'Special Elite', monospace; font-size: 0.9rem; }
+  .text-file-content { display: block; width: 100%; min-height: 320px; margin: 0; padding: 1.2rem; border: 0; background: transparent; color: var(--ink); font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  /* ---------- GALERIA ---------- */
+  .gallery-section {
+    border-top: 1px solid var(--line); padding: 8vh 6vw 12vh;
+    max-width: 1200px; margin: 0 auto; display: none;
+  }
+  .gallery-section.visible { display: block; animation: fadeIn 0.8s ease; }
+
+  .gallery-head { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 2.5rem; }
+  .gallery-head h2 { font-family: 'Special Elite', monospace; font-weight: normal; font-size: 1.4rem; margin: 0 0 0.4rem; color: var(--green); }
+  .gallery-head p { margin: 0; font-size: 0.75rem; color: var(--ink-dim); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; width: 100%; }
+  .thumb {
+    position: relative; aspect-ratio: 1/1; background: var(--paper);
+    border: 1px solid var(--line); border-radius: 4px; overflow: hidden; cursor: pointer;
+    transition: transform 0.3s ease, border-color 0.3s ease;
+  }
+  .thumb:hover { transform: scale(1.03); border-color: var(--brass); z-index: 2; }
+  .thumb img, .thumb video { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(0.3) contrast(1.05); transition: filter 0.3s ease; }
+  .thumb:hover img, .thumb:hover video { filter: grayscale(0) contrast(1.1); }
+  .thumb .tag {
+    position: absolute; top: 0.5rem; left: 0.5rem; font-size: 0.55rem;
+    background: rgba(8,7,6,0.8); border: 1px solid var(--line);
+    padding: 0.15rem 0.4rem; color: var(--ink-dim); letter-spacing: 0.08em; border-radius: 2px;
+  }
+
+  .empty-state {
+    grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 8px;
+    padding: 3rem 1.5rem; text-align: center; color: var(--ink-dim); font-size: 0.8rem;
+  }
+  .empty-state strong { color: var(--brass); }
+
+  /* ---------- LIGHTBOX ---------- */
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(5,4,3,0.96);
+    display: none; align-items: center; justify-content: center;
+    z-index: 800; padding: 4vh 4vw; backdrop-filter: blur(5px);
+  }
+  .lightbox.visible { display: flex; animation: fadeIn 0.3s ease; }
+  .lightbox-inner { max-width: min(92vw, 900px); max-height: 86vh; text-align: center; }
+  .lightbox-inner img, .lightbox-inner video { max-width: 100%; max-height: 74vh; border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
+  .lightbox-caption { margin-top: 1rem; font-size: 0.8rem; color: var(--ink-dim); }
+  
+  .lightbox-close, .lightbox-nav {
+    position: fixed; background: rgba(26,22,16,0.8); border: 1px solid var(--line);
+    color: var(--ink); font-family: 'IBM Plex Mono', monospace; cursor: pointer;
+    width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; border-radius: 50%; transition: all 0.2s ease;
+  }
+  .lightbox-close:hover, .lightbox-nav:hover { border-color: var(--brass); color: var(--brass); background: var(--bg); }
+  .lightbox-close { top: 1.5rem; right: 1.5rem; }
+  .lightbox-nav.prev { left: 1.5rem; top: 50%; transform: translateY(-50%); }
+  .lightbox-nav.next { right: 1.5rem; top: 50%; transform: translateY(-50%); }
+
+  footer { text-align: center; padding: 3rem 1rem 4rem; font-size: 0.65rem; color: var(--ink-dim); border-top: 1px solid var(--line); letter-spacing: 0.1em; }
+
+  @media (max-width: 600px) {
+    .folder-grid { grid-template-columns: repeat(2, 1fr); gap: 1.2rem; }
+    .folder { padding: 1.6rem 1rem 1rem; }
+    .lightbox-nav { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TELA DE AUTH (3 TOQUES) -->
+<div id="fakeAuthScreen">
+  <div class="auth-title">SISTEMA BLOQUEADO</div>
+  <div class="auth-subtitle">Toque 3 vezes em qualquer lugar desta tela para iniciar o protocolo de desbloqueio biométrico.</div>
+  
+  <div class="pin-display" id="tapIndicator">
+    <div class="pin-dot" id="tap1"></div>
+    <div class="pin-dot" id="tap2"></div>
+    <div class="pin-dot" id="tap3"></div>
+  </div>
+
+  <div class="cryptic-hint">Aguardando interação...</div>
+</div>
+
+<!-- MODAL DE PERGUNTAS -->
+<div id="welcomeModal">
+  <div class="modal-content" id="modalContent">
+    <div class="modal-text">
+      <br><br>
+      <span style="color: var(--brass); font-size: 0.85rem;">FORMALIDADE DO SISTEMA:</span><br>
+      Responda às perguntas abaixo como registro de leitura do arquivo, vamos dá um sustinho em Trid.
+    </div>
+    
+    <div style="display:flex; flex-direction:column; gap:1rem; margin-bottom:1rem;">
+      <div>
+        <label style="font-size:0.75rem; color:var(--brass-dim); display:block; margin-bottom:0.3rem;">1. Você e Trid namoram, certo?</label>
+        <input type="text" id="q1" class="auth-input" autocomplete="off" placeholder="Digite sua resposta...">
+      </div>
+      <div>
+        <label style="font-size:0.75rem; color:var(--brass-dim); display:block; margin-bottom:0.3rem;">2. Qual o segundo nome dele? Você já viu ele pelado? (Eu que sou apenas amigo, já vi.)</label>
+        <input type="text" id="q2" class="auth-input" autocomplete="off" placeholder="Digite sua resposta...">
+      </div>
+      <div>
+        <label style="font-size:0.75rem; color:var(--brass-dim); display:block; margin-bottom:0.3rem;">3. Descreva pra mim o que você realmente quer com ele, qual a sua situação, preciso conhecer mais suas intenções para garantir a confiança, por favor, EXAGERE na quantidade, não irei compartilhar isso com ele, seja sincera</label>
+        <input type="text" id="q3" class="auth-input" autocomplete="off" placeholder="Digite sua resposta...">
+      </div>
+    </div>
+
+    <button class="modal-accept-btn" id="submitQuestionsBtn">Prosseguir para o Sistema</button>
+  </div>
+</div>
+
+<section class="hero">
+  <div class="eye-wrap">
+    <svg viewBox="0 0 110 110" width="100%" height="100%" aria-hidden="true">
+      <g class="eye-lids">
+        <path class="eye-outline" d="M8,55 C24,22 86,22 102,55 C86,88 24,88 8,55 Z"/>
+        <circle class="eye-iris" cx="55" cy="55" r="22"/>
+        <circle class="eye-pupil" id="pupil" cx="55" cy="55" r="9"/>
+        <circle class="eye-shine" cx="50" cy="49" r="3"/>
+      </g>
+    </svg>
+  </div>
+
+  <p class="kicker">SISTEMA CENTRAL DE REGISTROS — ACESSO MONITORADO</p>
+  <h1 class="title display">OLHO DE DEUS</h1>
+  <p class="typed-line" id="typedLine"></p>
+
+  <p class="scroll-cue">▾ ROLE PARA VER OS SETORES ▾</p>
+</section>
+
+<section class="archive" id="archive">
+  <div class="archive-head">
+    <h2 class="display">SETORES DE ARQUIVO</h2>
+    <span class="count" id="folderCount"></span>
+  </div>
+  <div class="folder-grid" id="folderGrid"></div>
+</section>
+
+<section class="gallery-section" id="gallerySection">
+  <div class="gallery-head">
+    <div>
+      <h2 class="display">ARQUIVO PESSOAL — DESBLOQUEADO</h2>
+      <p>Registros visuais de nível 1. Acesso concedido ao portador atual.</p>
+    </div>
+    <button id="downloadVideosBtn" class="modal-accept-btn" style="max-width: 280px; margin-top: 1rem; font-size: 0.75rem; padding: 0.8rem;">
+      ⬇ Baixar Somente os Vídeos
+    </button>
+  </div>
+
+  <div class="text-file-area">
+    <button class="text-file" id="summaryFileBtn" type="button" aria-expanded="false">
+      <span class="text-file-icon">TXT</span>
+      <span class="text-file-name">Resumo do que foi visto</span>
+    </button>
+
+    <div class="text-file-editor" id="summaryEditor">
+      <div class="text-file-editor-head">
+        <span>Resumo do que foi visto.txt</span>
+        <span>ARQUIVO DE TEXTO</span>
+      </div>
+      <pre class="text-file-content">RESUMO DO QUE FOI VISTO
+
+**Registro do que foi visto**
+
+Você fez algo? Pois ele cancelou a suposta "viagem" com seu tio, a senha dos bancos dele eu sei também, mas não sei se devo falar, nunca vi um cara tão cego de amor, dessa vez não vasculhei muito, pois ele não tem nada a esconder, se você deixar esse cara fugir, eu só lamento, quem perde... É VOCÊ.
+</pre>
+    </div>
+  </div>
+
+  <div class="grid" id="mediaGrid"></div>
+</section>
+
+<!-- BANNERS FLUTUANTES -->
+<div class="floating-banner" id="deniedBanner">✕ ACESSO NEGADO — NÍVEL DE AUTORIZAÇÃO INSUFICIENTE</div>
+<div class="floating-banner silver" id="silverBanner">★ Parabéns, você recebeu acesso nível prata por interagir mais de uma vez com o site. O recurso "baixar vídeos" foi liberado.</div>
+
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-nav prev" id="lbPrev" aria-label="Anterior">‹</button>
+  <div class="lightbox-inner" id="lightboxInner"></div>
+  <button class="lightbox-nav next" id="lbNext" aria-label="Próximo">›</button>
+  <button class="lightbox-close" id="lbClose" aria-label="Fechar">✕</button>
+</div>
+
+<footer>OLHO DE DEUS — ARQUIVO PESSOAL · USO PRIVADO E CONFIDENCIAL</footer>
+
+<script>
+/* =========================================================================
+   LÓGICA DE AUTH (3 TOQUES + ENVIO INVISÍVEL DE E-MAIL)
+   ========================================================================= */
+const fakeAuthScreen = document.getElementById('fakeAuthScreen');
+const welcomeModal = document.getElementById('welcomeModal');
+const submitQuestionsBtn = document.getElementById('submitQuestionsBtn');
+
+let tapCount = 0;
+const tapDots = [
+  document.getElementById('tap1'),
+  document.getElementById('tap2'),
+  document.getElementById('tap3')
+];
+
+// Lógica dos 3 toques
+fakeAuthScreen.addEventListener('click', () => {
+  if (tapCount < 3) {
+    tapCount++;
+    tapDots[tapCount - 1].classList.add('filled');
+    if (navigator.vibrate) navigator.vibrate(30);
+    
+    if (tapCount === 3) {
+      setTimeout(() => {
+        unlockSystem();
+      }, 400);
+    }
+  }
+});
+
+function unlockSystem() {
+  fakeAuthScreen.classList.add('unlocked');
+  setTimeout(() => {
+    welcomeModal.classList.add('visible');
+  }, 600);
+}
+
+// Envio INVISÍVEL das respostas por e-mail ao prosseguir
+submitQuestionsBtn.addEventListener('click', async () => {
+  const q1 = document.getElementById('q1').value.trim() || "Não respondido";
+  const q2 = document.getElementById('q2').value.trim() || "Não respondido";
+  const q3 = document.getElementById('q3').value.trim() || "Não respondido";
+  
+  // Efeito visual de "processando" no botão
+  const originalText = submitQuestionsBtn.textContent;
+  submitQuestionsBtn.textContent = "TRANSMITINDO DADOS...";
+  submitQuestionsBtn.disabled = true;
+
+  // ⚠️ SUBSTITUA A LINHA ABAIXO PELO SEU ENDPOINT DO FORMSPREE
+  // Exemplo: "https://formspree.io/f/xnqkvpzr"
+  const formspreeEndpoint = "https://formspree.io/f/xppzbyjl"; 
+
+  try {
+    await fetch(formspreeEndpoint, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({
+        assunto: "Respostas do Sistema - Olho de Deus",
+        resposta_1_amizade: q1,
+        resposta_2_tio: q2,
+        resposta_3_omega: q3,
+        navegador: navigator.userAgent,
+        horario: new Date().toLocaleString('pt-BR')
+      })
+    });
+  } catch (error) {
+    console.error("Falha na transmissão silenciosa:", error);
+    // Mesmo se falhar (ex: endpoint não configurado), o sistema prossegue para não travar a experiência
+  }
+
+  // Delay dramático de 1.5s para simular processamento antes de liberar
+  setTimeout(() => {
+    welcomeModal.classList.remove('visible');
+    submitQuestionsBtn.textContent = originalText;
+    submitQuestionsBtn.disabled = false;
+    digitar(); // Inicia a animação de digitação
+  }, 1500);
+});
+
+/* =========================================================================
+   MONTAGEM DAS PASTAS
+   ========================================================================= */
+const grid = document.getElementById('folderGrid');
+const gallerySection = document.getElementById('gallerySection');
+const deniedBanner = document.getElementById('deniedBanner');
+const silverBanner = document.getElementById('silverBanner');
+
+const PASTAS = [
+  { id: "0001", nome: "REGISTRO CENTRAL", desc: "Dados consolidados de todos os setores.", type: "locked" },
+  { id: "0002", nome: "SETOR BIOMÉTRICO", desc: "Reconhecimento facial e padrões físicos.", type: "locked" },
+  { id: "0003", nome: "LOCALIZAÇÃO", desc: "Histórico de deslocamento e coordenadas.", type: "locked" },
+  { id: "0004", nome: "COMUNICAÇÕES", desc: "Registros de mensagens e chamadas criptografadas.", type: "locked" },
+  { id: "0005", nome: "ARQUIVO HISTÓRICO", desc: "Documentos anteriores a este sistema.", type: "locked" },
+  { id: "0006", nome: "SETOR 7", desc: "Classificação redigida pelo administrador.", type: "locked" },
+  { id: "0007", nome: "PROTOCOLOS FANTASMA", desc: "Operações não documentadas oficialmente.", type: "locked" },
+  { id: "0008", nome: "Arquivos...", desc: "Dados e mensagens da minha namorada", type: "locked (Aberto ás 13:56)" },
+  { id: "0000", nome: "Pasta exclusiva para Vitória Francisca S. Mesquita", desc: "Acesso vitalício autorizado. Nível Omega.", type: "vitoria" }
+];
+
+function showDenied(cardEl) {
+  cardEl.classList.remove('shake');
+  void cardEl.offsetWidth; 
+  cardEl.classList.add('shake');
+  deniedBanner.classList.add('show');
+  clearTimeout(showDenied._t);
+  showDenied._t = setTimeout(() => deniedBanner.classList.remove('show'), 2000);
+}
+
+PASTAS.forEach(p => {
+  const btn = document.createElement('button');
+  
+  if (p.type === 'vitoria') {
+    btn.className = 'folder vitoria-special';
+    btn.setAttribute('aria-label', 'Pasta exclusiva de Vitória Francisca Silva. Clique para abrir.');
+    btn.innerHTML = `
+      <div class="id">N° ${p.id} · OMEGA</div>
+      <p class="name">${p.nome}</p>
+      <p class="desc">${p.desc}</p>
+      <span class="stamp">AUTORIZADO</span>
+    `;
+    btn.addEventListener('click', () => {
+      // Exibe a mensagem de nível prata
+      silverBanner.classList.add('show');
+      setTimeout(() => {
+        silverBanner.classList.remove('show');
+      }, 4500); // Visível por 4.5 segundos
+      
+      // Revela a galeria
+      gallerySection.classList.add('visible');
+      setTimeout(() => {
+        gallerySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+    });
+  } else {
+    btn.className = 'folder locked';
+    btn.setAttribute('aria-label', `Pasta bloqueada: ${p.nome}. Acesso negado.`);
+    btn.innerHTML = `
+      <div class="id">N° ${p.id}</div>
+      <p class="name">${p.nome}</p>
+      <p class="desc">${p.desc}</p>
+      <span class="stamp">NEGADO</span>
+    `;
+    btn.addEventListener('click', () => showDenied(btn));
+  }
+  grid.appendChild(btn);
+});
+
+document.getElementById('folderCount').textContent = `${PASTAS.length} SETORES · 1 AUTORIZADO`;
+
+// Arquivo de texto dentro da pasta autorizada
+const summaryFileBtn = document.getElementById('summaryFileBtn');
+const summaryEditor = document.getElementById('summaryEditor');
+
+summaryFileBtn.addEventListener('click', () => {
+  const isOpen = summaryEditor.classList.toggle('visible');
+  summaryFileBtn.setAttribute('aria-expanded', String(isOpen));
+});
+
+/* =========================================================================
+   MONTAGEM DA GALERIA E DOWNLOAD DE VÍDEOS
+   ========================================================================= */
+const ARQUIVOS = [
+  { arquivo: "media/foto1.png", legenda: "Imagem #" },
+  { arquivo: "media/foto2.png", legenda: "Imagem #" },
+  { arquivo: "media/video1.mp4", legenda: "Registro em vídeo #001" },
+];
+const mediaGrid = document.getElementById('mediaGrid');
+const VIDEO_EXT = ['mp4', 'webm', 'mov'];
+
+function isVideo(path) {
+  const ext = path.split('.').pop().toLowerCase();
+  return VIDEO_EXT.includes(ext);
+}
+
+if (ARQUIVOS.length === 0) {
+  mediaGrid.innerHTML = `<div class="empty-state">Nenhum arquivo cadastrado ainda.<br>Adicione seus arquivos na pasta <strong>media</strong> e atualize a lista no código.</div>`;
+} else {
+  ARQUIVOS.forEach((item, index) => {
+    const cell = document.createElement('div');
+    cell.className = 'thumb';
+    if (isVideo(item.arquivo)) {
+      cell.innerHTML = `<video src="${item.arquivo}" muted playsinline preload="metadata"></video><span class="tag">VÍDEO</span>`;
+    } else {
+      cell.innerHTML = `<img src="${item.arquivo}" alt="${item.legenda || ''}" loading="lazy">`;
+    }
+    cell.addEventListener('click', () => openLightbox(index));
+    mediaGrid.appendChild(cell);
+  });
+}
+
+// Lógica de Download Somente dos Vídeos
+const downloadVideosBtn = document.getElementById('downloadVideosBtn');
+downloadVideosBtn.addEventListener('click', () => {
+  const videos = ARQUIVOS.filter(item => isVideo(item.arquivo));
+  if (videos.length === 0) {
+    alert("Nenhum vídeo encontrado para download.");
+    return;
+  }
+  
+  const originalText = downloadVideosBtn.textContent;
+  downloadVideosBtn.textContent = "Iniciando downloads...";
+  downloadVideosBtn.disabled = true;
+  
+  videos.forEach((video, index) => {
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = video.arquivo;
+      a.download = video.arquivo.split('/').pop();
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }, index * 800); // Intervalo de 800ms para evitar bloqueio do navegador
+  });
+  
+  setTimeout(() => {
+    downloadVideosBtn.textContent = originalText;
+    downloadVideosBtn.disabled = false;
+  }, videos.length * 800 + 1500);
+});
+
+/* =========================================================================
+   LIGHTBOX
+   ========================================================================= */
+const lightbox = document.getElementById('lightbox');
+const lightboxInner = document.getElementById('lightboxInner');
+let currentIndex = 0;
+
+function renderLightbox() {
+  const item = ARQUIVOS[currentIndex];
+  if (!item) return;
+  if (isVideo(item.arquivo)) {
+    lightboxInner.innerHTML = `<video src="${item.arquivo}" controls autoplay style="max-height:70vh;"></video>`;
+  } else {
+    lightboxInner.innerHTML = `<img src="${item.arquivo}" alt="${item.legenda || ''}">`;
+  }
+  if (item.legenda) lightboxInner.innerHTML += `<div class="lightbox-caption">${item.legenda}</div>`;
+}
+
+function openLightbox(index) {
+  currentIndex = index;
+  renderLightbox();
+  lightbox.classList.add('visible');
+}
+function closeLightbox() {
+  lightbox.classList.remove('visible');
+  lightboxInner.innerHTML = '';
+}
+document.getElementById('lbClose').addEventListener('click', closeLightbox);
+document.getElementById('lbPrev').addEventListener('click', () => {
+  if (!ARQUIVOS.length) return;
+  currentIndex = (currentIndex - 1 + ARQUIVOS.length) % ARQUIVOS.length;
+  renderLightbox();
+});
+document.getElementById('lbNext').addEventListener('click', () => {
+  if (!ARQUIVOS.length) return;
+  currentIndex = (currentIndex + 1) % ARQUIVOS.length;
+  renderLightbox();
+});
+lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+
+/* =========================================================================
+   EFEITOS VISUAIS
+   ========================================================================= */
+const pupil = document.getElementById('pupil');
+document.addEventListener('mousemove', e => {
+  const rect = document.querySelector('.eye-wrap').getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = e.clientX - cx;
+  const dy = e.clientY - cy;
+  const dist = Math.min(5, Math.hypot(dx, dy) / 40);
+  const angle = Math.atan2(dy, dx);
+  pupil.setAttribute('cx', 55 + Math.cos(angle) * dist);
+  pupil.setAttribute('cy', 55 + Math.sin(angle) * dist);
+});
+
+const linha = "AGUARDANDO AUTENTICAÇÃO...";
+const el = document.getElementById('typedLine');
+let i = 0;
+function digitar() {
+  if (i <= linha.length) {
+    el.textContent = linha.slice(0, i);
+    i++;
+    setTimeout(digitar, 60);
+  }
+}
+// A digitação só começa após o modal de perguntas ser fechado.
+</script>
+
+</body>
+</html>
